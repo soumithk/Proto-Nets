@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 
 from mini_imagenet import MiniImageNet
 from samplers import CategoriesSampler
-from convnet import Convnet, CTM_apadter
+from convnet import create_model
 from utils import pprint, set_gpu, ensure_path, Averager, Timer, count_acc, euclidean_metric
 
 
@@ -17,10 +17,12 @@ if __name__ == '__main__':
     parser.add_argument('--save-epoch', type=int, default=20)
     parser.add_argument('--shot', type=int, default=1)
     parser.add_argument('--query', type=int, default=15)
-    parser.add_argument('--train-way', type=int, default=30)
+    parser.add_argument('--train-way', type=int, default=5)
     parser.add_argument('--test-way', type=int, default=5)
     parser.add_argument('--save-path', default='./save/proto-1')
     parser.add_argument('--gpu', default='0')
+    parser.add_argument('--base_model', default='resnet18')
+    parser.add_argument('--use_CTM', type = bool, default=True)
     args = parser.parse_args()
     pprint(vars(args))
 
@@ -39,8 +41,9 @@ if __name__ == '__main__':
     val_loader = DataLoader(dataset=valset, batch_sampler=val_sampler,
                             num_workers=8, pin_memory=True)
 
-    model = Convnet().cuda()
-    model = CTM_apadter(model, args).cuda()
+    # model = Convnet().cuda()
+    # model = CTM_apadter(model, args).cuda()
+    model = create_model(args)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
@@ -104,7 +107,7 @@ if __name__ == '__main__':
             label = label.type(torch.cuda.LongTensor)
 
             logits = model(data)
-            
+
             loss = F.cross_entropy(logits, label)
             acc = count_acc(logits, label)
 

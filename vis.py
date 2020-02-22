@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 
 from mini_imagenet import MiniImageNet
 from samplers import CategoriesSampler
-from convnet import create_model
+from convnet import Convnet, CTM_apadter
 from utils import pprint, set_gpu, count_acc, Averager, euclidean_metric
 
 
@@ -18,8 +18,6 @@ if __name__ == '__main__':
     parser.add_argument('--train-way', type=int, default=5)
     parser.add_argument('--shot', type=int, default=1)
     parser.add_argument('--query', type=int, default=30)
-    parser.add_argument('--base_model', default='resnet18')
-    parser.add_argument('--use_CTM', type = bool, default=True)
     args = parser.parse_args()
     pprint(vars(args))
 
@@ -27,42 +25,31 @@ if __name__ == '__main__':
 
     dataset = MiniImageNet('test')
     sampler = CategoriesSampler(dataset.label,
-                                args.batch, args.test_way, args.shot + args.query)
-    loader = DataLoader(dataset, batch_sampler=sampler,
                         num_workers=8, pin_memory=True)
 
-    # model = Convnet().cuda()
-    # model = CTM_apadter(model, args).cuda()
-    model = create_model(args)
+    model = Convnet().cuda()
+    model = CTM_apadter(model, args).cuda()
     model.load_state_dict(torch.load(args.load))
     model.eval()
 
     ave_acc = Averager()
 
     for i, batch in enumerate(loader, 1):
-        data, _ = [_.cuda() for _ in batch]
+        data, labels = [_.cuda() for _ in batch]
 
         label = torch.arange(args.test_way).repeat(args.query)
         label = label.type(torch.cuda.LongTensor)
 
         logits = model(data)
+        pred = torch.argmax(logits, dim=1)
 
         acc = count_acc(logits, label)
 
-        #
-        # k = args.way * args.shot
-        # data_shot, data_query = data[:k], data[k:]
-        #
-        # x = model(data_shot)
-        # x = x.reshape(args.shot, args.way, -1).mean(dim=0)
-        # p = x
-        #
-        # logits = euclidean_metric(model(data_query), p)
-        #
-        # label = torch.arange(args.way).repeat(args.query)
-        # label = label.type(torch.cuda.LongTensor)
-        #
-        # acc = count_acc(logits, label)
+        print(labels)
+        print(pred)
+        print(label)
+        input()
+
         ave_acc.add(acc)
         print('batch {}: {:.2f}({:.2f})'.format(i, ave_acc.item() * 100, acc * 100))
 
