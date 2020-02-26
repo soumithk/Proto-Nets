@@ -4,20 +4,35 @@ from utils import euclidean_metric
 from torch.nn import functional as F
 import math
 
-from layers import conv_block, Bottleneck
+from layers import conv_block, Bottleneck, conv_block_downsample
 
 
 
 class Convnet(nn.Module):
 
-    def __init__(self, x_dim=3, hid_dim=64, z_dim=64):
+    def __init__(self, x_dim=3, hid_dim=64, z_dim=64, type = 0):
         super().__init__()
-        self.encoder = nn.Sequential(
-            conv_block(x_dim, hid_dim),
-            conv_block(hid_dim, hid_dim),
-            conv_block(hid_dim, hid_dim),
-            conv_block(hid_dim, z_dim),
-        )
+        if type == 0 :
+            self.encoder = nn.Sequential(
+                conv_block(x_dim, hid_dim),
+                conv_block(hid_dim, hid_dim),
+                conv_block(hid_dim, hid_dim),
+                conv_block(hid_dim, z_dim),
+            )
+        elif type == 1 :
+            self.encoder = nn.Sequential(
+                conv_block(x_dim, hid_dim),
+                conv_block(hid_dim, hid_dim),
+                conv_block(hid_dim, z_dim),
+                conv_block_downsample(hid_dim, hid_dim),
+            )
+        else :
+            self.encoder = nn.Sequential(
+                conv_block(x_dim, hid_dim),
+                conv_block(hid_dim, hid_dim),
+                conv_block_downsample(hid_dim, hid_dim),
+                conv_block_downsample(hid_dim, hid_dim),
+            )
         self.out_channels = 1600
 
     def forward(self, x):
@@ -84,6 +99,7 @@ class CTM_apadter(nn.Module):
 
     def __init__(self, base_model, args):
         super().__init__()
+        print("Adding CTM")
         self.base_model = base_model
         self.args = args
         out_size = 16
@@ -110,6 +126,7 @@ class CTM_apadter(nn.Module):
             self.inplanes = 64 * args.train_way
             self.projector = self._make_layer(Bottleneck, out_size, 2, stride=1)
             self.reshaper = None
+
     def forward(self, data) :
 
         shot = self.args.shot
@@ -177,6 +194,17 @@ class No_apadter(nn.Module):
         self.base_model = base_model
         self.args = args
 
+        out_size = 16
+
+        if args.base_model.startswith('resnet'):
+            self.inplanes = 256 * 4
+            self.reshaper = nn.Sequential(
+                self._make_layer(Bottleneck, out_size*2, 3, stride=1),
+                self._make_layer(Bottleneck, out_size, 2, stride=1)
+            )
+        else :
+            self.reshaper = None
+
     def forward(self, data):
         shot = self.args.shot
         if self.training :
@@ -188,15 +216,34 @@ class No_apadter(nn.Module):
         x, data_query = data[:nk], data[nk:]
 
         x = self.base_model(x)
+        if self.reshaper is not None :
+            x = self.reshaper(x)
         proto = x.view(shot, ways, -1).mean(0)
 
         query = self.base_model(data_query)
+        if self.reshaper is not None :
+            query = self.reshaper(query)
         query = query.view(query.size(0), -1)
-
 
         logits = euclidean_metric(query, proto)
 
         return logits
+
+    def _make_layer(self, block, planes, blocks, stride=1):
+        downsample = None
+        if stride != 1 or self.inplanes != planes * block.expansion:
+            downsample = nn.Sequential(
+                nn.Conv2d(self.inplanes, planes * block.expansion,
+                          kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm2d(planes * block.expansion),
+            )
+        layers = []
+        layers.append(block(self.inplanes, planes, stride, downsample))
+        self.inplanes = planes * block.expansion
+        for i in range(1, blocks):
+            layers.append(block(self.inplanes, planes))
+
+        return nn.Sequential(*layers)
 
 def create_model(args):
 
@@ -209,6 +256,8 @@ def create_model(args):
 
     if args.use_CTM :
         model = CTM_apadter(model, args).cuda()
+    else :
+        model = No_apadter(model, args).cuda()
 
     return model
 

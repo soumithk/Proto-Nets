@@ -14,6 +14,15 @@ def conv_block(in_channels, out_channels):
         nn.MaxPool2d(2)
     )
 
+def conv_block_downsample(in_channels, out_channels):
+    bn = nn.BatchNorm2d(out_channels)
+    nn.init.uniform_(bn.weight)
+    return nn.Sequential(
+        nn.Conv2d(in_channels, out_channels, 3),
+        bn,
+        nn.ReLU(),
+        nn.MaxPool2d(2)
+    )
 
 
 class Bottleneck(nn.Module):

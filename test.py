@@ -19,7 +19,7 @@ if __name__ == '__main__':
     parser.add_argument('--shot', type=int, default=1)
     parser.add_argument('--query', type=int, default=30)
     parser.add_argument('--base_model', default='resnet18')
-    parser.add_argument('--use_CTM', type = bool, default=True)
+    parser.add_argument('--use_CTM', type = int, default=1)
     args = parser.parse_args()
     pprint(vars(args))
 

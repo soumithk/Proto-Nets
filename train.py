@@ -22,7 +22,7 @@ if __name__ == '__main__':
     parser.add_argument('--save-path', default='./save/proto-1')
     parser.add_argument('--gpu', default='0')
     parser.add_argument('--base_model', default='resnet18')
-    parser.add_argument('--use_CTM', type = bool, default=True)
+    parser.add_argument('--use_CTM', type = int, default=1)
     args = parser.parse_args()
     pprint(vars(args))
 
@@ -45,7 +45,8 @@ if __name__ == '__main__':
     # model = CTM_apadter(model, args).cuda()
     model = create_model(args)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
 
     def save_model(name):
